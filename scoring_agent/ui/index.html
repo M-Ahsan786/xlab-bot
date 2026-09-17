@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scoring Agent</title>
+<style>
+  :root{
+    --navy:#0B2A4A; --navy2:#0E3357; --ink:#0b2033; --teal:#1FA5A0; --teal2:#17c0b8;
+    --bg:#eef3f7; --card:#ffffff; --line:#dce5ee; --muted:#5a6b7b; --text:#12232f;
+    --ok:#1B7A4B; --okbg:#d8f3e6; --warn:#9A6B00; --warnbg:#fff4d6; --err:#b02020; --errbg:#fbe0e0;
+    --shadow:0 10px 30px rgba(11,42,74,.10);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:"Segoe UI",Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);
+    font-size:14px;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+  /* top bar */
+  header{background:linear-gradient(120deg,var(--navy),var(--navy2));color:#fff;
+    padding:14px 22px;display:flex;align-items:center;gap:14px;flex:0 0 auto}
+  .logo{width:38px;height:38px;flex:0 0 auto}
+  .brand{display:flex;flex-direction:column;line-height:1.15}
+  .brand b{font-size:17px;letter-spacing:.3px}
+  .brand span{font-size:11px;color:#a9c6dd}
+  header .spacer{flex:1}
+  .ghost{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);color:#dfeaf3;
+    padding:7px 12px;border-radius:8px;cursor:pointer;font-size:12px}
+  .ghost:hover{background:rgba(255,255,255,.18)}
+
+  main{flex:1;overflow:auto;padding:20px 22px}
+  .wrap{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+  .card .hd{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .card .hd .n{width:24px;height:24px;border-radius:7px;background:var(--teal);color:#fff;display:grid;
+    place-items:center;font-weight:700;font-size:12px;flex:0 0 auto}
+  .card .hd h3{margin:0;font-size:14px}
+  .card .bd{padding:16px 18px}
+
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .btn{background:var(--teal);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-size:13px;
+    font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+  .btn:hover{background:var(--teal2)}
+  .btn.big{padding:12px 22px;font-size:14px}
+  .btn:disabled{background:#a9c3c2;cursor:not-allowed}
+  .btn.dark{background:var(--navy)}
+  .btn.dark:hover{background:var(--navy2)}
+  .btn.outline{background:#fff;color:var(--navy);border:1px solid var(--line)}
+  .btn.outline:hover{border-color:var(--teal);color:var(--teal)}
+  .pathbox{flex:1;min-width:220px;background:#f6f9fb;border:1px solid var(--line);border-radius:9px;
+    padding:10px 12px;color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .stat{flex:1;min-width:120px;background:#f6f9fb;border:1px solid var(--line);border-radius:11px;padding:12px 14px}
+  .stat .v{font-size:22px;font-weight:700;color:var(--navy)}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+
+  /* mode segmented */
+  .seg{display:inline-flex;background:#eef3f7;border:1px solid var(--line);border-radius:10px;padding:4px;gap:4px}
+  .seg button{border:0;background:transparent;padding:9px 14px;border-radius:7px;cursor:pointer;font-size:13px;
+    font-weight:600;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .seg button.on{background:#fff;color:var(--navy);box-shadow:0 2px 6px rgba(11,42,74,.10)}
+  .hint{color:var(--muted);font-size:12px;margin-top:8px}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:230px;flex:1}
+  .field label{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600}
+  .field input{border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px;
+    font-family:inherit;background:#f6f9fb;color:var(--text)}
+  .field input:focus{outline:none;border-color:var(--teal);background:#fff}
+  .locknote{display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:12px;color:var(--muted)}
+  .locknote svg{flex:0 0 auto;margin-top:1px}
+
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:#f8fafc;position:sticky;top:0}
+  td.mod{font-weight:600;color:var(--ink)}
+  .tbl-wrap{max-height:340px;overflow:auto;border-top:1px solid var(--line)}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700}
+  .b-pending{background:#eef3f7;color:#5a6b7b}
+  .b-run{background:#e6f0ff;color:#2b5cc4}
+  .b-live{background:var(--okbg);color:var(--ok)}
+  .b-prog{background:var(--warnbg);color:var(--warn)}
+  .b-fail{background:var(--errbg);color:var(--err)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .spin{width:11px;height:11px;border:2px solid #2b5cc4;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .kind{font-size:11px;color:var(--muted)}
+  .mini{background:#fff;color:var(--ok);border:1px solid #b6e3cd;border-radius:7px;padding:4px 10px;
+    font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .mini:hover{background:var(--okbg)}
+  .mini:disabled{opacity:.45;cursor:not-allowed}
+  .hdbtn{background:var(--teal);color:#fff;border:0;border-radius:8px;padding:6px 12px;font-size:12px;
+    font-weight:600;cursor:pointer;margin-left:10px}
+  .hdbtn:hover{background:var(--teal2)}
+  .hdbtn:disabled{background:#a9c3c2;cursor:not-allowed}
+  .vm{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--navy)}
+
+  /* progress */
+  .pbar{height:10px;background:#e6edf3;border-radius:999px;overflow:hidden}
+  .pbar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--teal2));transition:width .3s}
+  .counters{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-top:8px}
+  .counters b{color:var(--navy)}
+
+  /* banners */
+  .banner{display:none;align-items:center;gap:12px;background:#fff7e6;border:1px solid #ffe1a6;color:#7a5b00;
+    padding:12px 14px;border-radius:11px}
+  .banner.show{display:flex}
+  .banner.info{background:#eaf3ff;border-color:#c6dcfb;color:#234e8f}
+  .banner.err{background:var(--errbg);border-color:#f0b5b5;color:var(--err)}
+  .banner .spacer{flex:1}
+  .banner .x{background:transparent;border:1px solid currentColor;color:inherit;border-radius:8px;
+    padding:5px 10px;font-size:12px;cursor:pointer;opacity:.75}
+  .banner .x:hover{opacity:1}
+
+  /* log */
+  details.log{background:var(--ink);color:#cfe3f2;border-radius:12px;overflow:hidden}
+  details.log summary{padding:10px 14px;cursor:pointer;font-size:12.5px;color:#9fc0da;list-style:none;background:#0a1c2b}
+  details.log pre{margin:0;padding:12px 14px;max-height:200px;overflow:auto;font:12px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
+
+  .done{display:none;align-items:center;gap:14px;background:linear-gradient(120deg,#0d3a5f,#0E3357);color:#fff;
+    padding:16px 18px;border-radius:14px}
+  .done.show{display:flex}
+  .done .big{font-size:22px;font-weight:800}
+  .done .spacer{flex:1}
+  .muted{color:var(--muted)}
+  .foot{flex:0 0 auto;padding:8px 22px;color:#88a;font-size:11px;text-align:center;background:#e7eef4;border-top:1px solid var(--line)}
+
+  /* modal (about) */
+  .overlay{position:fixed;inset:0;background:rgba(6,20,33,.55);display:none;place-items:center;z-index:50}
+  .overlay.show{display:grid}
+  .modal{background:#fff;border-radius:16px;max-width:460px;width:90%;box-shadow:var(--shadow);overflow:hidden}
+  .modal .mh{background:linear-gradient(120deg,var(--navy),var(--navy2));color:#fff;padding:18px 20px;display:flex;gap:12px;align-items:center}
+  .modal .mb{padding:20px}
+  .modal .mb p{margin:8px 0;color:var(--muted);font-size:13px}
+  .modal .mb b{color:var(--text)}
+</style>
+</head>
+<body>
+<header>
+  <svg class="logo" viewBox="0 0 48 48" fill="none">
+    <rect width="48" height="48" rx="11" fill="#0E3357"/>
+    <path d="M14 33c8-3 12-19 20-18" stroke="#1FA5A0" stroke-width="3" stroke-linecap="round"/>
+    <path d="M14 15c8 3 12 19 20 18" stroke="#17c0b8" stroke-width="3" stroke-linecap="round" opacity=".7"/>
+    <circle cx="14" cy="33" r="3" fill="#17c0b8"/><circle cx="34" cy="15" r="3" fill="#1FA5A0"/>
+  </svg>
+  <div class="brand"><b>Scoring&nbsp;Agent</b><span>Automated scoring-script publisher</span></div>
+  <div class="spacer"></div>
+  <span id="sess" class="ghost" style="cursor:default;opacity:.9"></span>
+  <button class="ghost" id="reset" title="Stop everything, close the browser and clear the saved login - without restarting the app">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="vertical-align:-1px"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Reset session</button>
+  <button class="ghost" id="signout" title="Clear the saved login from this machine">Sign out</button>
+  <button class="ghost" id="updbtn" onclick="openUpdates()">Updates</button>
+  <button class="ghost" onclick="showAbout()">About</button>
+</header>
+
+<main>
+ <div class="wrap">
+
+  <!-- step 1 -->
+  <section class="card">
+    <div class="hd"><div class="n">1</div><h3>Select the course folder</h3></div>
+    <div class="bd">
+      <div class="row">
+        <button class="btn dark" id="pick"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="#fff" stroke-width="1.6"/></svg>Browse…</button>
+        <div class="pathbox" id="path">No folder selected — pick a folder that has the Module Excel and the .ps1 scripts.</div>
+      </div>
+      <div class="stats" id="stats" style="display:none">
+        <div class="stat"><div class="v" id="s-mod">0</div><div class="l">Modules</div></div>
+        <div class="stat"><div class="v" id="s-job">0</div><div class="l">With script</div></div>
+        <div class="stat"><div class="v" id="s-miss">0</div><div class="l">Missing script</div></div>
+      </div>
+      <div class="hint" id="excel"></div>
+    </div>
+  </section>
+
+  <!-- sign-in -->
+  <section class="card" id="cardLogin" style="display:none">
+    <div class="hd"><div class="n">2</div><h3>Portal sign-in</h3>
+      <span class="muted" style="margin-left:auto;font-size:12px">optional</span></div>
+    <div class="bd">
+      <div class="row">
+        <div class="field">
+          <label for="pUser">Username</label>
+          <input id="pUser" type="text" autocomplete="off" spellcheck="false" placeholder="your XtremeLabs username">
+        </div>
+        <div class="field">
+          <label for="pPass">Password</label>
+          <input id="pPass" type="password" autocomplete="off" placeholder="••••••••">
+        </div>
+      </div>
+      <div class="hint">Fill these in and the agent signs in for you and ticks <b>Keep me signed
+        in</b>. If the page asks for a CAPTCHA it stops and lets you finish that bit yourself.
+        Leave them blank to sign in by hand in the browser, as before.</div>
+      <div class="locknote">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v10H5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        <div><b>Not saved anywhere.</b> They stay in memory for this run only — never written to
+          disk, the activity log or the report — and are cleared the moment sign-in is tried.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- step 3 -->
+  <section class="card" id="card2" style="display:none">
+    <div class="hd"><div class="n">3</div><h3>Choose what to do</h3></div>
+    <div class="bd">
+      <div class="seg" id="seg">
+        <button data-mode="save" class="on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 4h11l3 3v13H5z" stroke="currentColor" stroke-width="1.6"/><path d="M8 4v5h7" stroke="currentColor" stroke-width="1.6"/></svg>Save as InProgress</button>
+        <button data-mode="live"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 12l4 4 8-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Make Live</button>
+      </div>
+      <div class="hint" id="modehint">Uploads each script and leaves it <b>InProgress</b> — you make them live yourself later.</div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn big" id="start" disabled>Start</button>
+        <button class="btn outline" id="cancel" style="display:none">Stop</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- starting banner -->
+  <div class="banner info" id="busyBanner">
+    <div class="spin" id="busySpin" style="border-color:#3f74c4;border-top-color:transparent"></div>
+    <div id="busyText"><b>Starting…</b> opening Chrome. The very first run can take a minute while the browser driver is prepared.</div>
+  </div>
+
+  <!-- login banner -->
+  <div class="banner" id="loginBanner">
+    <div class="spin" style="border-color:#c99b1e;border-top-color:transparent"></div>
+    <div><b>Log in required.</b> A Chrome window has opened — please sign in to XtremeLabs there. The run continues automatically once you're in.</div>
+  </div>
+
+  <!-- update available -->
+  <div class="banner info" id="updBanner">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 20h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><b>Update available.</b> <span id="updBannerText"></span></div>
+    <div class="spacer"></div>
+    <button class="x" onclick="openUpdates()">See it</button>
+    <button class="x" onclick="document.getElementById('updBanner').classList.remove('show')">Later</button>
+  </div>
+
+  <!-- error banner -->
+  <div class="banner err" id="errBanner">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v6M12 16.5v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <div><b>Run stopped.</b> <span id="errText"></span></div>
+    <div class="spacer"></div>
+    <button class="x" onclick="document.getElementById('errBanner').classList.remove('show')">Dismiss</button>
+  </div>
+
+  <!-- job list + progress -->
+  <section class="card" id="card3" style="display:none">
+    <div class="hd"><div class="n">4</div><h3>Job list</h3><span class="muted" id="jobsub" style="margin-left:auto;font-size:12px"></span>
+      <button class="hdbtn" id="makeAllLive" style="display:none">Make all live</button></div>
+    <div class="bd" style="padding-bottom:6px">
+      <div class="pbar"><i id="pfill"></i></div>
+      <div class="counters">
+        <span>Progress: <b id="c-done">0</b>/<b id="c-total">0</b></span>
+        <span>Live: <b id="c-live">0</b></span>
+        <span>Saved: <b id="c-saved">0</b></span>
+        <span>Failed: <b id="c-fail">0</b></span>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:34px">#</th><th>Module</th><th style="width:120px">VM</th><th style="width:110px">Type</th><th style="width:130px">Status</th><th style="width:110px">Action</th></tr></thead>
+        <tbody id="jobs"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- done -->
+  <div class="done" id="done">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#17c0b8" stroke-width="1.5"/><path d="M7 12l3.5 3.5L17 8" stroke="#17c0b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><div class="big" id="doneTitle">Run complete</div><div id="doneSub" style="color:#a9c6dd;font-size:13px"></div>
+      <div id="doneNext" style="color:#9fe6df;font-size:12.5px;margin-top:4px;display:none"></div></div>
+    <div class="spacer"></div>
+    <button class="btn" id="openReport">Open report</button>
+    <button class="btn outline" id="openFolder" style="background:transparent;color:#cfe3f2;border-color:rgba(255,255,255,.28)">Folder</button>
+  </div>
+
+  <details class="log" id="logBox"><summary>Activity log <span id="logHint" style="opacity:.6"></span></summary><pre id="log"></pre></details>
+
+ </div>
+</main>
+<div class="foot">Scoring Agent · developed by Hafiz Muhammad Ahsan</div>
+
+<!-- reset confirm -->
+<div class="overlay" id="resetModal">
+  <div class="modal">
+    <div class="mh">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4h-4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div><b style="font-size:15px">Reset session</b><div style="font-size:12px;color:#a9c6dd">Start again from a clean state</div></div>
+    </div>
+    <div class="mb">
+      <p>This will:</p>
+      <p style="margin-left:6px">• stop anything that is running and <b>close the automation browser</b><br>
+         • <b>clear the saved login</b> (cookies and cached profile)<br>
+         • clear the screen: selected folder, job list and log</p>
+      <p id="resetWarn" class="muted" style="display:none;color:#b02020"><b>A run is in progress</b> — it will be stopped and the report written for what finished so far.</p>
+      <p class="muted" style="font-size:12px">You do not need to close and reopen the app. You'll sign in again on the next run.</p>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button class="btn outline" id="resetNo">Cancel</button>
+        <button class="btn" id="resetYes">Reset session</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- updates -->
+<div class="overlay" id="updates">
+  <div class="modal">
+    <div class="mh">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 20h14" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div><b style="font-size:16px">Updates</b>
+        <div style="font-size:12px;color:#a9c6dd">You are on version <span id="updCurrent">…</span></div></div>
+    </div>
+    <div class="mb">
+      <div class="field">
+        <label for="updRepo">Release repository (GitHub)</label>
+        <input id="updRepo" type="text" spellcheck="false" placeholder="owner/repo — e.g. xtremelabs/scoring-agent">
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:6px">Set this once. New versions are
+        published there as a release with the setup <b>.exe</b> attached; everyone's app then
+        offers it automatically.</p>
+
+      <div id="updResult" style="margin-top:12px"></div>
+
+      <div class="pbar" id="updBar" style="display:none;margin-top:12px"><i id="updFill"></i></div>
+
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button class="btn outline" onclick="hideUpdates()">Close</button>
+        <button class="btn outline" id="updCheck">Check now</button>
+        <button class="btn" id="updInstall" style="display:none">Download &amp; install</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- about -->
+<div class="overlay" id="about">
+  <div class="modal">
+    <div class="mh">
+      <svg width="30" height="30" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="11" fill="#1FA5A0"/><path d="M14 33c8-3 12-19 20-18" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
+      <div><b style="font-size:16px">Scoring Agent</b><div style="font-size:12px;color:#a9c6dd">Version 1.2.2</div></div>
+    </div>
+    <div class="mb">
+      <p>Automates uploading and publishing XtremeLabs scoring scripts, driven by a Module Excel and a folder of <b>.ps1</b> scripts.</p>
+      <p><b>Developer:</b> Hafiz Muhammad Ahsan</p>
+      <p class="muted" style="font-size:12px">Security: your username and password are never stored. You sign in through your own browser and only the session is kept — and it is cleared automatically after <b>3 hours</b> of the agent not being used, so you re-verify before the next use. Use <b>Sign out</b> to clear it now, or <b>Reset session</b> to stop everything, close the browser and start clean without restarting the app.</p>
+      <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn outline" onclick="hideAbout()">Close</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

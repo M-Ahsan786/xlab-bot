@@ -1,0 +1,22 @@
+# --- build output ---------------------------------------------------------
+build/
+dist/
+*.spec
+installer/Output/
+
+# --- python ---------------------------------------------------------------
+__pycache__/
+*.pyc
+
+# --- anything the app writes while it runs. NONE of this belongs in a repo:
+#     the Chrome profile holds the portal session cookie, and reports/logs are
+#     course data. ---------------------------------------------------------
+chrome-profile/
+session/
+reports/
+logs/
+updates/
+settings.json
+webview/
+Scoring-Agent-Report-*.xlsx
+Scoring-Agent-Log-*.txt
