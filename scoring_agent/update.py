@@ -27,6 +27,9 @@ import urllib.request
 from .paths import app_dir
 from .version import __version__ as CURRENT
 
+# Where the team publishes releases. Baked in so nobody has to configure anything; the
+# Updates dialog can still point a particular machine somewhere else.
+DEFAULT_REPO = "M-Ahsan786/xlab-bot"
 GITHUB_API = "https://api.github.com/repos/{repo}/releases/latest"
 REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 ALLOWED_HOSTS = ("github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com")
@@ -58,7 +61,12 @@ def save_settings(data: dict):
 
 
 def get_repo() -> str:
-    return str(load_settings().get("update_repo") or "").strip()
+    """The repo to check. A value saved on this machine wins; otherwise the built-in default."""
+    saved = load_settings().get("update_repo")
+    if saved is None:
+        return DEFAULT_REPO                 # never configured - use ours
+    saved = str(saved).strip()
+    return saved or DEFAULT_REPO
 
 
 def set_repo(repo: str) -> str:

@@ -4,7 +4,7 @@
 ; developer info, Start-Menu + Desktop shortcuts, and an uninstaller.
 
 #define AppName        "Scoring Agent"
-#define AppVersion     "1.2.2"
+#define AppVersion     "1.2.3"
 #define AppPublisher   "Hafiz Muhammad Ahsan"
 #define AppExe         "ScoringAgent.exe"
 
