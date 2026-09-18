@@ -241,6 +241,19 @@ class Portal:
         except Exception:
             return True                      # unknown hiccup - assume alive, don't kill the run
 
+    def bring_to_front(self):
+        """Raise the automation browser so the user can see which window is being driven."""
+        try:
+            self.driver.execute_cdp_cmd("Page.bringToFront", {})
+            return True
+        except Exception:
+            pass
+        try:
+            self.driver.maximize_window()    # older Chrome / no CDP: still raises it
+            return True
+        except Exception:
+            return False
+
     def _where(self) -> str:
         """Current URL, for the log - never raises."""
         try:
@@ -345,6 +358,7 @@ class Portal:
         session is good - so the UI's "log in" banner is never shown/left up by guesswork.
         """
         self._safe_get(self.cfg.scoring_url)
+        self.bring_to_front()          # so it is obvious which browser the agent is driving
         # Give the first check a longer grace period: with the 'eager' strategy the page can
         # still be settling, and we don't want to flash "log in required" on a good session.
         if self._logged_in(timeout=15):

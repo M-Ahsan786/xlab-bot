@@ -33,7 +33,7 @@ SEP = bytes([13, 10])        # SSE record separator
 ALLOWED = {
     "pick_folder", "preview", "start_run", "start_make_live", "cancel", "is_running",
     "reset_session", "open_path", "session_status", "sign_out",
-    "app_version", "update_settings", "check_update", "install_update",
+    "app_version", "check_update", "install_update",
 }
 
 

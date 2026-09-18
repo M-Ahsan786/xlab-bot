@@ -395,33 +395,26 @@ function openUpdates(){
   $("updates").classList.add("show");
   $("updBanner").classList.remove("show");
   API.app_version().then(v => { $("updCurrent").textContent = v.version; }).catch(()=>{});
-  API.update_settings().then(r => {
-    if (r && r.ok) $("updRepo").value = r.repo || "";
-    if (r && r.ok && r.repo) checkUpdates();      // a repo is set, so look straight away
-  }).catch(()=>{});
+  checkUpdates();                    // look as soon as the dialog opens
 }
 function hideUpdates(){ $("updates").classList.remove("show"); }
 
 function updSay(html){ $("updResult").innerHTML = html; }
 
 async function checkUpdates(quiet){
-  const repo = $("updRepo").value.trim();
-  const saved = await API.update_settings(repo).catch(()=>null);
-  if (saved && saved.ok === false){ updSay(`<span style="color:#b02020">${escapeHtml(saved.error)}</span>`); return null; }
-
   if (!quiet) updSay("Checking…");
-  const r = await API.check_update(repo).catch(()=>null);
+  const r = await API.check_update().catch(()=>null);
   updLatest = null;
   $("updInstall").style.display = "none";
   if (!r) { if (!quiet) updSay("Could not check just now."); return null; }
 
   if (!r.ok){
     const why = {
-      no_repo:  "Add your release repository above, then press <b>Check now</b>.",
-      bad_repo: "That repository name does not look right. Use <b>owner/repo</b>.",
-      not_found:"No releases found there yet — or the repository is private.",
-      offline:  "Could not reach GitHub. Check your connection and try again.",
-    }[r.reason] || ("Could not check (" + escapeHtml(r.reason || "unknown") + ").");
+      no_repo:  "Updates are not set up in this build.",
+      bad_repo: "Updates are not set up in this build.",
+      not_found:"No update has been published yet.",
+      offline:  "Could not reach the update server. Check your connection and try again.",
+    }[r.reason] || "Could not check just now. Try again in a moment.";
     if (!quiet) updSay(why);
     return null;
   }
@@ -466,8 +459,6 @@ async function installUpdate(){
 /* A quiet look for updates, well after the page has settled - never during load. */
 function scheduleUpdateCheck(){
   setTimeout(async () => {
-    const r = await API.update_settings().catch(()=>null);
-    if (!r || !r.ok || !r.repo) return;           // nothing configured, stay quiet
     const found = await checkUpdates(true);
     if (found){
       $("updBannerText").textContent =

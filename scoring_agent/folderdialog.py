@@ -44,6 +44,41 @@ def _vtbl_call(obj, index, *args, restype=ctypes.HRESULT, argtypes=()):
     return fn(obj, *args)
 
 
+def _app_window() -> int:
+    """The app's own window, so the dialog is OWNED by it and opens in front.
+
+    Without an owner Windows is free to put the dialog behind the app, where people cannot see
+    that anything opened at all. An exact title lookup usually finds it; if the window has been
+    renamed for any reason, fall back to walking the visible top-level windows.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, "Scoring Agent")
+        if hwnd:
+            return int(hwnd)
+
+        found = []
+
+        def cb(h, _):
+            if not user32.IsWindowVisible(h):
+                return True
+            n = user32.GetWindowTextLengthW(h)
+            if n > 0:
+                buf = ctypes.create_unicode_buffer(n + 1)
+                user32.GetWindowTextW(h, buf, n + 1)
+                if buf.value.strip().startswith("Scoring Agent"):
+                    found.append(h)
+            return True
+
+        proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(cb)
+        user32.EnumWindows(proc, 0)
+        return int(found[0]) if found else 0
+    except Exception:
+        return 0
+
+
 def ask_folder(title: str = "Select the course folder") -> str | None:
     """Show the folder picker. Returns the chosen path, or None if cancelled/unavailable."""
     ole32 = ctypes.windll.ole32
@@ -64,7 +99,14 @@ def ask_folder(title: str = "Select the course folder") -> str | None:
                    argtypes=(c_uint,))
         _vtbl_call(dialog, 17, c_wchar_p(title), argtypes=(c_wchar_p,))
 
-        hr = _vtbl_call(dialog, 3, HWND(0), argtypes=(HWND,))
+        owner = _app_window()
+        if owner:
+            # bring our window up first, so the dialog lands on top of a focused app
+            try:
+                ctypes.windll.user32.SetForegroundWindow(owner)
+            except Exception:
+                pass
+        hr = _vtbl_call(dialog, 3, HWND(owner), argtypes=(HWND,))
         if hr != 0:
             return None                      # the user cancelled
 
