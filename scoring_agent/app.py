@@ -1,15 +1,18 @@
-"""Scoring Agent - desktop app (pywebview shell around a modern web UI).
+"""Scoring Agent - the desktop app.
 
-The UI only shows the job list + progress; all the portal automation runs in the backend
-(Engine), on a worker thread, pushing events/progress to the page.
+The window is Chrome in `--app` mode (a real app window: no tabs, no address bar) pointed at a
+small local server, which is how the page and the backend talk. It used to be an embedded
+WebView2 window driven by pywebview; that deadlocked solid on roughly one launch in ten - the
+window blocked with 0% CPU and never recovered - and no amount of patching removed it.
+
+The UI still only shows the job list + progress; all the portal automation runs in the backend
+(Engine) on a worker thread, and events are streamed to the page.
 """
 from __future__ import annotations
 import json
 import os
 import sys
 import threading
-
-import webview
 
 # NOTE: Engine (and through it openpyxl/selenium) is imported lazily - see _engine().
 # Importing it here delayed the window by many seconds, so Windows painted the app
@@ -39,9 +42,7 @@ def _ui_file() -> str:
 def _ui_html() -> str:
     """The whole UI as one HTML string, with app.js inlined.
 
-    Handing pywebview `html=` skips its bundled HTTP server. That server runs on a Python
-    thread, and while the GUI thread holds the GIL during WebView2 start-up it cannot answer -
-    so the page took ~23s to load and Windows painted the window "(Not Responding)" meanwhile.
+    One file means one request: the window is up as soon as the server answers.
     """
     ui = os.path.join(_here(), "ui")
     with open(os.path.join(ui, "index.html"), encoding="utf-8") as fh:
@@ -54,26 +55,27 @@ def _ui_html() -> str:
 
 class Api:
     def __init__(self):
-        self.window = None
+        self.server = None          # set by main(); how events reach the page
         self.engine = None
         self._thread = None
         self._log_fh = None
 
     # ---- helpers to talk to the page ----
     def _emit(self, name, payload):
-        if not self.window:
+        srv = getattr(self, "server", None)
+        if srv is None:
             return
         try:
-            self.window.evaluate_js(f"window.__on(({json.dumps(name)}),({json.dumps(payload)}))")
+            srv.emit(name, payload)
         except Exception:
             pass
 
     # ---- exposed to JS ----
     def pick_folder(self):
-        res = self.window.create_file_dialog(webview.FOLDER_DIALOG)
-        if res:
-            return res[0] if isinstance(res, (list, tuple)) else res
-        return None
+        """Windows' own folder dialog. None means cancelled - or that it could not be shown,
+        in which case the page offers a box to paste a path into instead."""
+        from .folderdialog import ask_folder
+        return ask_folder()
 
     def preview(self, path):
         try:
@@ -289,11 +291,7 @@ class Api:
             except Exception:
                 return
             time.sleep(1.5)              # then get out of the way so files aren't locked
-            try:
-                if self.window:
-                    self.window.destroy()
-            except Exception:
-                os._exit(0)
+            os._exit(0)
 
         threading.Thread(target=go, daemon=True).start()
         return {"ok": True, "path": path}
@@ -320,11 +318,7 @@ class Api:
 
 
 def _claim_single_instance() -> bool:
-    """True if we are the only instance. Otherwise focus the running one and return False.
-
-    Without this, double-clicking the icon twice leaves two windows fighting over the same
-    saved session, and the user cannot tell which one is theirs.
-    """
+    """True if we are the only instance, otherwise focus the running one and return False."""
     try:
         import ctypes
         from ctypes import wintypes
@@ -347,44 +341,77 @@ def _claim_single_instance() -> bool:
         return True                              # never block startup over this
 
 
-# WebView2 reads this before it starts. Without it the embedded browser does the same
-# start-up chatter a full browser does (component update, optimisation hints, telemetry), and
-# on a slow or filtered connection that blocks its initialisation for ~20s - during which the
-# GUI thread cannot pump messages and Windows paints the app "(Not Responding)".
-os.environ.setdefault(
-    "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-    "--disable-background-networking --disable-component-update --no-first-run "
-    "--disable-sync --disable-features=OptimizationHints,Translate,MediaRouter "
-    "--disable-breakpad --no-pings")
+def _no_browser_message():
+    import ctypes
+    ctypes.windll.user32.MessageBoxW(
+        None,
+        "Scoring Agent needs Google Chrome, which is also what it uses to drive the "
+        "portal." + chr(10) + chr(10) +
+        "Install Chrome and start Scoring Agent again.",
+        APP_NAME, 0x10)
+
+
+def _window_failed_message():
+    import ctypes
+    ctypes.windll.user32.MessageBoxW(
+        None,
+        "Scoring Agent could not open its window." + chr(10) + chr(10) +
+        "Close any Scoring Agent window that is already open and try again.",
+        APP_NAME, 0x10)
 
 
 def main():
     if not _claim_single_instance():
         return
+
+    from . import shell
+    from .server import UiServer
+
+    if shell.find_browser() is None:
+        _no_browser_message()
+        return
+
     api = Api()
-    window = webview.create_window(
-        APP_NAME, html=_ui_html(), js_api=api,
-        width=1120, height=760, min_size=(920, 620),
-        background_color="#0B2A4A",
-    )
-    api.window = window
-    # Give WebView2 ONE persistent profile instead of letting pywebview build a fresh
-    # private one on every launch - creating a browser profile from scratch is what makes
-    # start-up take tens of seconds on some launches.
-    store = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
-                         APP_NAME, "webview")
+    server = UiServer(api, _ui_html()).start()
+    api.server = server
+
+    proc = shell.open_window(server.url)
+    if proc is None:
+        _no_browser_message()
+        return
+
+    # Do NOT treat the launcher exiting as "the window closed". Chrome often hands the command
+    # line to an instance that already owns this profile and the launcher then exits at once
+    # (exit code 21) while the window is perfectly fine. What actually tells us the window is
+    # there - and later gone - is whether it is connected to our event stream.
+    import time
+    deadline = time.time() + 90
+    while time.time() < deadline and not server.ever_connected:
+        time.sleep(0.2)
+    if not server.ever_connected:
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+        except Exception:
+            pass
+        _window_failed_message()
+        return
+
     try:
-        os.makedirs(store, exist_ok=True)
-    except Exception:
-        store = None
-    # NOTHING is sent to or asked of the page while it loads. Measured over dozens of
-    # launches: any bridge traffic in that window occasionally deadlocks WebView2 and the
-    # app locks up for good. The chip starts at "Not signed in" and is refreshed the first
-    # time the user actually does something.
-    if store:
-        webview.start(private_mode=False, storage_path=store)
-    else:
-        webview.start()
+        while True:
+            time.sleep(0.5)
+            if server.clients:
+                continue
+            # a reload or a hiccup drops the stream for a moment - only leave once it stays gone
+            if time.time() - server.last_disconnect > 6:
+                break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            server.shutdown()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 <#  Build Scoring Agent into dist\ScoringAgent\ScoringAgent.exe (windowed GUI app).
-    Needs: pip install pyinstaller pywebview selenium openpyxl
+    Needs: pip install pyinstaller selenium openpyxl   (the window is Chrome itself)
     The teammate needs Google Chrome + the Edge/IE WebView2 runtime (ships with Windows 11).
 
     NOTE: this is a --onedir build on purpose. The old --onefile build unpacked ~48 MB into a
@@ -24,14 +24,14 @@ if ($pyVer -ne $issVer -or $pyVer -ne $htmlVer) {
   exit 1
 }
 Write-Host ("Version: {0}" -f $pyVer)
-python -m pip install --quiet --upgrade pyinstaller pywebview selenium openpyxl
+python -m pip install --quiet --upgrade pyinstaller selenium openpyxl
 python -m PyInstaller --noconfirm --clean --onedir --windowed `
   --name ScoringAgent `
   --icon assets\scoring-agent.ico `
   --add-data "scoring_agent\ui;ui" `
-  --collect-all webview `
   --collect-all selenium `
   --collect-submodules openpyxl `
+  --exclude-module webview --exclude-module clr --exclude-module clr_loader `
   --exclude-module numpy --exclude-module pandas --exclude-module PIL `
   --exclude-module matplotlib --exclude-module tkinter --exclude-module scipy `
   --exclude-module IPython --exclude-module pytest --exclude-module setuptools `

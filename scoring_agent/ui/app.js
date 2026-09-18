@@ -1,26 +1,43 @@
-/* Scoring Agent UI logic. Talks to the Python backend via window.pywebview.api,
-   and receives backend events through window.__on(name, payload). */
-let API = null;
+/* Scoring Agent UI logic. Calls the backend over the app's own local HTTP API and receives
+   its events through window.__on(name, payload). */
 let state = { path: null, mode: "save", jobs: [], rowByModule: {}, statusByModule: {},
                counts: {done:0,total:0,live:0,saved:0,fail:0}, running:false };
 
 function $(id){ return document.getElementById(id); }
-/* Resolves when the Python bridge is attached - but never hangs: if the event does not
-   arrive it keeps checking, and gives up after `ms` so the caller can carry on. */
-function apiReady(ms = 20000){ return new Promise(res => {
-  const grab = () => {
-    if (window.pywebview && window.pywebview.api){ API = window.pywebview.api; return true; }
-    return false;
-  };
-  if (grab()) return res(true);
-  let done = false;
-  const finish = ok => { if (!done){ done = true; clearInterval(poll); res(ok); } };
-  window.addEventListener('pywebviewready', () => { if (grab()) finish(true); });
-  const poll = setInterval(() => { if (grab()) finish(true); }, 200);   // belt and braces
-  setTimeout(() => finish(grab()), ms);
-});}
 
-/* Any backend call made at startup gets a deadline - a slow bridge must not freeze the UI. */
+/* ---------- talking to the backend ----------
+   The window is a Chrome app window pointed at a small local server, so a call is just a POST
+   and events arrive on a Server-Sent Events stream. (This replaced pywebview's in-process
+   bridge, which deadlocked the window on roughly one launch in ten.) The token in the address
+   is what proves this page is the app's own window; every request carries it. */
+const TOKEN = new URLSearchParams(location.search).get("t") || "";
+
+async function call(method, ...args){
+  const r = await fetch(`/api/${method}?t=${encodeURIComponent(TOKEN)}`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(args),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (data && data.error) throw new Error(data.error);
+  return data ? data.result : undefined;
+}
+
+/* Same shape the rest of the UI expects: API.preview(path), API.start_run(...), and so on. */
+const API = new Proxy({}, { get: (_, name) => (...args) => call(String(name), ...args) });
+
+function connectEvents(){
+  const es = new EventSource(`/events?t=${encodeURIComponent(TOKEN)}`);
+  es.onmessage = e => {
+    try {
+      const m = JSON.parse(e.data);
+      window.__on(m.name, m.payload);
+    } catch (err) {}
+  };
+  es.onerror = () => {};          // EventSource reconnects on its own
+}
+
+/* Any backend call made at startup gets a deadline - a slow backend must not freeze the UI. */
 function callWithin(fn, ms, fallback){
   return Promise.race([
     Promise.resolve().then(fn).catch(() => fallback),
@@ -139,8 +156,14 @@ function onError(msg){
 
 /* ---------- UI -> backend ---------- */
 async function pick(){
-  const p = await API.pick_folder();
-  if (!p) return;
+  let p = await API.pick_folder().catch(() => null);
+  if (!p){
+    // the dialog was cancelled, or Windows would not show it - offer the manual way
+    p = prompt("Paste the full path of the course folder:", "");
+    if (!p) return;
+    p = p.trim().replace(/^"|"$/g, "");
+    if (!p) return;
+  }
   state.path = p; $("path").textContent = p;
   $("path").style.color = "#12232f";
   const r = await API.preview(p);
@@ -325,7 +348,6 @@ function renderSession(s){
 /* Ask the backend for the session state. Only ever called AFTER the page is up (a finished
    run, Sign out, Reset) - never while it is loading, which used to deadlock the window. */
 async function refreshSession(){
-  if (!API){ renderSession(null); return; }
   try{
     renderSession(await callWithin(() => API.session_status(), 8000, null));
   }catch(e){ renderSession(null); }
@@ -360,15 +382,10 @@ function wireUi(){
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  wireUi();                            // usable immediately
-  renderSession(null);                 // honest default until we have a reason to ask
-  // Attach the bridge so the buttons work - but send NOTHING across it yet. Talking to the
-  // backend while WebView2 is still bringing the page up is what locked the window solid;
-  // the chip is refreshed on the first real action instead (see pick()).
-  apiReady().then(ok => {
-    if (!ok) showErr(true, "The app could not reach its own backend. Close Scoring Agent and open it again.");
-    else scheduleUpdateCheck();
-  });
+  wireUi();
+  connectEvents();
+  refreshSession();
+  scheduleUpdateCheck();
 });
 
 /* ---------- updates ---------- */
@@ -377,7 +394,6 @@ let updLatest = null;                 // the release we found, if any
 function openUpdates(){
   $("updates").classList.add("show");
   $("updBanner").classList.remove("show");
-  if (!API) return;
   API.app_version().then(v => { $("updCurrent").textContent = v.version; }).catch(()=>{});
   API.update_settings().then(r => {
     if (r && r.ok) $("updRepo").value = r.repo || "";
@@ -389,7 +405,6 @@ function hideUpdates(){ $("updates").classList.remove("show"); }
 function updSay(html){ $("updResult").innerHTML = html; }
 
 async function checkUpdates(quiet){
-  if (!API) return null;
   const repo = $("updRepo").value.trim();
   const saved = await API.update_settings(repo).catch(()=>null);
   if (saved && saved.ok === false){ updSay(`<span style="color:#b02020">${escapeHtml(saved.error)}</span>`); return null; }
@@ -432,7 +447,7 @@ async function checkUpdates(quiet){
 }
 
 async function installUpdate(){
-  if (!updLatest || !API) return;
+  if (!updLatest) return;
   const b = $("updInstall");
   b.disabled = true; b.textContent = "Downloading…";
   $("updBar").style.display = ""; $("updFill").style.width = "0%";
@@ -451,7 +466,6 @@ async function installUpdate(){
 /* A quiet look for updates, well after the page has settled - never during load. */
 function scheduleUpdateCheck(){
   setTimeout(async () => {
-    if (!API) return;
     const r = await API.update_settings().catch(()=>null);
     if (!r || !r.ok || !r.repo) return;           // nothing configured, stay quiet
     const found = await checkUpdates(true);

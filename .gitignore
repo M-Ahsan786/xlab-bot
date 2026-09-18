@@ -18,5 +18,6 @@ logs/
 updates/
 settings.json
 webview/
+window-profile/
 Scoring-Agent-Report-*.xlsx
 Scoring-Agent-Log-*.txt

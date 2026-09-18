@@ -63,6 +63,11 @@ class ScanResult:
     module_count: int
 
 
+# Workbooks the agent itself wrote. They carry a "Module Name" column, so without this a
+# previous run's report could be picked up as the module list for the next run.
+OUR_OUTPUT = ("scoring-agent-report",)
+
+
 def _find_excels(path: str) -> list:
     """Every workbook under the folder (a course folder often has an audit workbook too)."""
     if os.path.isfile(path) and path.lower().endswith((".xlsx", ".xlsm")):
@@ -70,8 +75,12 @@ def _find_excels(path: str) -> list:
     out = []
     for root, _dirs, files in os.walk(path):
         for f in sorted(files):
-            if f.lower().endswith((".xlsx", ".xlsm")) and not f.startswith("~$"):
-                out.append(os.path.join(root, f))
+            low = f.lower()
+            if not low.endswith((".xlsx", ".xlsm")) or f.startswith("~$"):
+                continue
+            if any(low.startswith(x) for x in OUR_OUTPUT):
+                continue                      # our own report, not somebody's module list
+            out.append(os.path.join(root, f))
     return out
 
 

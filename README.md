@@ -75,8 +75,12 @@ Developed by **Hafiz Muhammad Ahsan**.
   mid-batch the run stops cleanly and the report is **still written**, with the modules that
   never ran marked as such.
 - The machine is kept awake for the whole run.
-- The app opens in about 2 seconds and only one copy can run at a time (a second launch just
+- The app opens in about 1-2 seconds and only one copy can run at a time (a second launch just
   focuses the window that is already open).
+- **The window is Chrome in `--app` mode** (no tabs, no address bar) talking to a small local
+  server. It used to be an embedded WebView2 window, which locked up solid on roughly one launch
+  in ten - blocked with 0% CPU and never recovering. Measured after the change: 20 launches,
+  zero stalls. Chrome is already required, since the automation drives it.
 - Exact module matching (with the portal's `(…)` suffix tolerated) — it never publishes to the
   wrong module or version; anything uncertain is reported as Failed, not guessed.
 
@@ -99,7 +103,12 @@ Run from source (no build): `python -m scoring_agent`
 
 ```
 scoring_agent/
-  app.py         pywebview desktop shell (Python <-> UI bridge)
+  app.py         the app: the API the window calls, and start-up
+  server.py      the local HTTP/SSE server the window talks to (127.0.0.1, token-guarded)
+  shell.py       finds Chrome and opens the app window
+  folderdialog.py  Windows' own "pick a folder" dialog
+  update.py      checks GitHub Releases and fetches the installer
+  version.py     the one place the version number lives
   ui/            modern web UI (index.html, app.js) - job list + progress + report
   engine.py      run orchestration: modes, keep-awake, retries, report
   jobs.py        read the Module Excel + match .ps1 scripts -> job list
